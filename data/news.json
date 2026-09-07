@@ -1,0 +1,23 @@
+{
+  "lastUpdated": null,
+  "articleCount": 1,
+  "notice": "이 파일은 참고용 샘플입니다. 실제 운영 데이터는 이 파일이 아니라 Netlify Blobs에 저장되고, /.netlify/functions/get-news 를 통해 제공됩니다. 자세한 내용은 README.md의 '왜 정적 JSON 파일이 아닌가요?' 부분을 참고하세요.",
+  "articles": [
+    {
+      "company": "예시보험",
+      "sector": "손보",
+      "title": "이것은 스키마를 보여주기 위한 예시 기사입니다",
+      "date": "2026.01.01",
+      "facts": [
+        "facts는 2~3개의 짧은 사실 위주 구(phrase)로 구성됩니다",
+        "완결된 문장보다는 명사형 요약을 우선합니다"
+      ],
+      "consumerAngle": "이 기사가 소비자 입장에서 왜 중요한지 한 문장으로 설명합니다",
+      "internalNote": "삼성생명 소비자보호실 관점에서 참고할 점을 한 문장으로 설명합니다",
+      "status": "teal",
+      "statusLabel": "예시 라벨",
+      "source": "example.com",
+      "url": "https://example.com"
+    }
+  ]
+}
