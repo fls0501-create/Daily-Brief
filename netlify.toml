@@ -1,0 +1,28 @@
+[build]
+  publish = "."
+  functions = "netlify/functions"
+  command = "npm install"
+
+[functions]
+  node_bundler = "esbuild"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# ---------------------------------------------------------------
+# 참고: update-news.js 안에서 exports.handler = schedule("0 22 * * *", handler)
+# 로 이미 실행 주기를 지정했기 때문에, 이 파일에서 별도로 cron을 다시 쓸 필요는 없습니다.
+# (Netlify는 함수 코드 안의 schedule() 선언을 자동으로 인식합니다.)
+#
+# 만약 함수 코드를 건드리지 않고 이 파일에서 주기를 바꾸고 싶다면 아래처럼
+# [functions."update-news"] 블록에 schedule을 추가하는 방법도 있습니다.
+# (둘 다 설정되어 있으면 netlify.toml 쪽이 우선 적용됩니다)
+#
+# [functions."update-news"]
+#   schedule = "0 22 * * *"   # 매일 UTC 22:00 = 한국시간(KST) 오전 7시
+# ---------------------------------------------------------------
+
+[[redirects]]
+  from = "/api/news"
+  to = "/.netlify/functions/get-news"
+  status = 200

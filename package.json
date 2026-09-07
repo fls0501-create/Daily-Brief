@@ -1,0 +1,16 @@
+{
+  "name": "consumer-protection-daily-brief",
+  "version": "1.0.0",
+  "description": "삼성생명 소비자보호실 - 보험/금융 소비자보호 Daily Brief (완전 무료 자동 갱신 버전: Google News RSS + Gemini)",
+  "private": true,
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@netlify/blobs": "^8.1.0",
+    "@netlify/functions": "^2.8.1"
+  },
+  "scripts": {
+    "dev": "netlify dev"
+  }
+}
