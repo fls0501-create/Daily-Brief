@@ -43,7 +43,7 @@ const KEYWORDS = [
 ];
 
 const RECENT_DAYS = 3;
-const MAX_CANDIDATES = 60;
+const MAX_CANDIDATES = 25;      // Gemini 1회 호출 응답에 안정적으로 담기고, 무료 티어 분당 요청 제한도 여유 있게 지키는 수준
 const RETENTION_DAYS = 60;
 const BLOB_STORE_NAME = "news";
 const BLOB_KEY = "latest";
@@ -81,7 +81,7 @@ async function collectAndAnalyze() {
     return [];
   }
 
-  const analyzed = await analyzeAll(candidates, 10);
+  const analyzed = await analyzeAll(candidates);
   console.log(`[update-news] Gemini 분석 결과 ${analyzed.length}건 (소비자보호 관련으로 확정)`);
 
   const byId = new Map(candidates.map((c) => [c.id, c]));
@@ -89,9 +89,11 @@ async function collectAndAnalyze() {
     .map((a) => {
       const orig = byId.get(a.id);
       if (!orig) return null;
+      const sector = normalizeSector(a.sector || orig.sectorHint);
+      if (!sector) return null; // 5개 업권에 해당하지 않으면 제외
       return {
         company: a.company || orig.companyHint || "미상",
-        sector: normalizeSector(a.sector || orig.sectorHint),
+        sector,
         title: a.title || orig.title,
         date: normalizeDate(a.date) || orig.dateStr,
         facts: Array.isArray(a.facts) ? a.facts.slice(0, 3) : [],
@@ -107,8 +109,8 @@ async function collectAndAnalyze() {
 }
 
 function normalizeSector(s) {
-  const allowed = ["생보", "손보", "은행", "카드", "당국", "기타"];
-  return allowed.includes(s) ? s : "기타";
+  const allowed = ["생보", "손보", "삼성금융", "GA", "당국"];
+  return allowed.includes(s) ? s : null;
 }
 
 function normalizeDate(d) {

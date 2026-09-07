@@ -25,8 +25,17 @@ const SYSTEM_PROMPT = `당신은 국내 보험/금융 업계를 모니터링하�
 
 [선별 기준]
 - 금융소비자 보호와 직접 관련된 기사만 남기세요: 민원, 불완전판매, 보험금 지급/분쟁, 보이스피싱·금융사기 예방,
-  소비자경보, 금융당국의 소비자보호 관련 정책·감독, 각 금융사의 소비자보호 조직·제도·캠페인 등.
+  소비자경보, 금융당국의 소비자보호 관련 정책·감독, 각 금융사·GA의 소비자보호 조직·제도·캠페인 등.
 - 단순 실적 발표, 주가, 인사 소식, 소비자보호와 무관한 제휴 등은 제외하세요.
+- 업권은 생명보험/손해보험/삼성금융사(삼성화재·삼성카드·삼성증권·삼성자산운용)/GA(법인보험대리점)/금융당국
+  5개만 다룹니다. 이 5개 업권과 무관한 회사(일반 은행·카드·증권사 등) 기사는 제외하세요.
+
+[중복 병합 — 중요]
+- 같은 기관·회사의 같은 발표/사건을 다루는 기사가 여러 건 있으면 절대 각각 따로 출력하지 말고
+  하나로 합쳐서 가장 정보가 풍부한 버전 하나만 남기세요.
+  예: "금감원, 고령층 대상 OO 아카데미 추진"과 "금감원, 고령층 맞춤형 금융사기 예방 교육 실시"처럼
+  같은 정책(고령층 금융교육)을 다른 각도에서 다룬 기사는 하나로 합쳐서 facts에 두 내용을 모두 반영하세요.
+- 판단 기준: 같은 회사/기관 + 같은 날짜 + 같은 핵심 주제(정책/제도/사건)를 다루면 중복으로 간주합니다.
 
 [요약 원칙]
 - 원문 문장을 그대로 옮기지 말고 반드시 당신의 표현으로 재구성하세요(저작권 보호).
@@ -35,17 +44,18 @@ const SYSTEM_PROMPT = `당신은 국내 보험/금융 업계를 모니터링하�
 - internalNote: 삼성생명 소비자보호실 담당자가 참고할 점을 1문장.
 - status는 다음 중 하나만: "crimson"(주의·경보·제재·비판적 이슈), "teal"(일반 모니터링·제도변경), "gold"(우수사례·성과).
 - statusLabel은 status의 의미를 2~5자 한글로 표현.
-- sector는 다음 중 하나: "생보", "손보", "은행", "카드", "당국", "기타" (제공된 companyHint를 우선 참고).
+- sector는 다음 중 하나만 사용: "생보", "손보", "삼성금융", "GA", "당국" (제공된 companyHint/sectorHint를 우선 참고).
+  이 5개 중 어디에도 속하지 않으면 해당 기사는 아예 출력하지 마세요.
 
 [출력 형식]
 아래 JSON 스키마를 따르는 JSON 배열만 출력하세요. 설명, 코드블록 마크다운은 포함하지 마세요.
-소비자보호와 무관한 기사는 배열에서 제외하세요(빈 배열도 가능).
+소비자보호와 무관한 기사, 5개 업권에 속하지 않는 기사, 중복 기사는 배열에서 제외하세요(빈 배열도 가능).
 
 [
   {
-    "id": "입력으로 받은 id를 그대로 반환",
+    "id": "입력으로 받은 id를 그대로 반환 (병합한 경우, 대표로 삼은 기사의 id 하나만 반환)",
     "company": "회사/기관명",
-    "sector": "생보 | 손보 | 은행 | 카드 | 당국 | 기타",
+    "sector": "생보 | 손보 | 삼성금융 | GA | 당국",
     "title": "간결하게 다듬은 기사 제목",
     "date": "YYYY.MM.DD",
     "facts": ["핵심 사실 1", "핵심 사실 2"],
@@ -98,7 +108,7 @@ async function analyzeBatch(candidates) {
       ],
       generationConfig: {
         temperature: 0.3,
-        maxOutputTokens: 4000,
+        maxOutputTokens: 8000,
       },
     }),
   });
@@ -131,20 +141,18 @@ async function analyzeBatch(candidates) {
   }
 }
 
-/** 후보가 많을 때 배치 단위로 나눠서 순차 호출 (무료 티어 분당 요청 제한 보호용 딜레이 포함) */
-async function analyzeAll(candidates, batchSize = 10) {
-  const results = [];
-  for (let i = 0; i < candidates.length; i += batchSize) {
-    const batch = candidates.slice(i, i + batchSize);
-    try {
-      const analyzed = await analyzeBatch(batch);
-      results.push(...analyzed);
-    } catch (err) {
-      console.error(`배치 ${i / batchSize + 1} 분석 중 오류:`, err.message);
-    }
-    await new Promise((r) => setTimeout(r, 1500)); // 분당 요청 제한(RPM) 보호
+/** 후보 기사를 한 번의 호출로 모두 분석합니다.
+ *  (Gemini 무료 티어는 분당 5회 요청 제한이 있고, Netlify 함수 실행시간 제한(스케줄 30초/수동 60초)도
+ *   있어서, 여러 번 나눠 호출하며 대기하는 방식 대신 "한 번에 몰아서" 처리하는 방식으로 설계했습니다.
+ *   대신 MAX_CANDIDATES(update-news.js)를 넉넉하지 않게 유지해서 한 번의 응답 안에 다 담기게 합니다.) */
+async function analyzeAll(candidates) {
+  if (candidates.length === 0) return [];
+  try {
+    return await analyzeBatch(candidates);
+  } catch (err) {
+    console.error("기사 분석 중 오류:", err.message);
+    return [];
   }
-  return results;
 }
 
 /** 오늘 수집된 기사 전체를 바탕으로 "최근 동향 요약"을 2~3문장으로 생성 */

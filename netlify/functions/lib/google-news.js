@@ -95,19 +95,19 @@ async function searchGoogleNews(query) {
   });
 }
 
-/** 여러 키워드로 검색해서 하나의 배열로 합침 */
+/** 여러 키워드로 병렬 검색해서 하나의 배열로 합침
+ *  (Google News RSS는 Gemini처럼 엄격한 분당 요청 제한이 없어 병렬로 호출해도 안전하고,
+ *   Netlify 함수 실행시간 제한(스케줄 30초) 안에 끝내려면 순차보다 병렬이 훨씬 유리합니다.) */
 async function searchMultiple(queries) {
+  const results = await Promise.allSettled(queries.map((q) => searchGoogleNews(q)));
   const all = [];
-  for (const q of queries) {
-    try {
-      const results = await searchGoogleNews(q);
-      all.push(...results);
-    } catch (err) {
-      console.error(`"${q}" 검색 중 오류:`, err.message);
+  results.forEach((r, i) => {
+    if (r.status === "fulfilled") {
+      all.push(...r.value);
+    } else {
+      console.error(`"${queries[i]}" 검색 중 오류:`, r.reason?.message || r.reason);
     }
-    // 과도한 연속 요청 방지용 짧은 딜레이
-    await new Promise((r) => setTimeout(r, 150));
-  }
+  });
   return all;
 }
 

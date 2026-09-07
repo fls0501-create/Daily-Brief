@@ -10,13 +10,12 @@ const REFRESH_ENDPOINT = '/.netlify/functions/manual-update-news';
 const CAT_LABEL = {
   "생보": "생명보험",
   "손보": "손해보험",
-  "은행": "은행",
-  "카드": "카드",
-  "당국": "금융당국",
-  "기타": "기타"
+  "삼성금융": "삼성금융사",
+  "GA": "GA사",
+  "당국": "금융당국"
 };
 // 탭에 표시할 카테고리 순서 (전체 다음 순서)
-const CAT_ORDER = ["생보", "손보", "은행", "카드", "당국", "기타"];
+const CAT_ORDER = ["생보", "손보", "삼성금융", "GA", "당국"];
 
 const state = {
   cat: "전체",
@@ -292,7 +291,7 @@ const refreshLabel = document.getElementById('refreshLabel');
 refreshBtn.addEventListener('click', async ()=>{
   refreshBtn.disabled = true;
   refreshBtn.classList.add('spinning');
-  refreshLabel.textContent = '수집 중… (최대 1분)';
+  refreshLabel.textContent = '수집 중… (10~30초 소요)';
 
   try{
     const res = await fetch(REFRESH_ENDPOINT, { cache: 'no-store' });

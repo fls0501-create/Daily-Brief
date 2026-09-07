@@ -169,7 +169,7 @@ netlify deploy --prod
 ## 7. 첫 데이터 채워넣기
 
 배포 직후에는 아직 한 번도 수집이 안 된 상태라 화면에 기사가 없습니다.
-사이트에 접속해서 **"새로고침" 버튼을 한 번 눌러주세요.** 수십 초 정도 기다리면
+사이트에 접속해서 **"새로고침" 버튼을 한 번 눌러주세요.** 보통 10~30초 정도면 끝납니다. 기다리면
 "완료 (신규 N건)"으로 바뀌면서 화면에 기사가 채워집니다.
 
 이후로는 매일 한국시간 오전 7시에 자동으로 같은 작업이 반복되고,
@@ -195,7 +195,8 @@ netlify deploy --prod
 |---|---|
 | "새로고침" 눌러도 "갱신 실패" | Netlify → Logs → `manual-update-news` 로그 확인 (GEMINI_API_KEY 미등록이 가장 흔한 원인) |
 | 화면에 "기사 데이터를 불러오지 못했습니다" | `get-news` 함수 오류. Logs에서 확인 |
-| Gemini 호출이 "429 Too Many Requests" | 무료 티어 분당/일일 한도 초과. 잠시 후 다시 시도하거나 `analyze.js`의 배치 간 딜레이(1500ms)를 늘려보기 |
+| Gemini 호출이 "429 Too Many Requests" | 무료 티어 분당/일일 한도 초과 (분당 5회 제한). `MAX_CANDIDATES`를 더 줄이거나 잠시 후 다시 시도 |
+| "새로고침" 클릭 후 30~60초 넘게 응답이 없거나 504 에러 | Netlify 함수 실행시간 제한(스케줄 30초/수동 60초)에 걸린 것. `update-news.js`의 `MAX_CANDIDATES`를 더 줄여보기 |
 | 기사가 너무 적게 수집됨 | `update-news.js`의 `KEYWORDS`에 검색어 추가, `MAX_CANDIDATES`/`RECENT_DAYS` 값 조정 |
 | 특정 회사 기사가 전혀 안 잡힘 | `netlify/functions/lib/companies.js` 사전에 그 회사명이 등록되어 있는지 확인 |
 | "원문 보기" 클릭 시 구글 도메인이 잠깐 보임 | 정상입니다. Google News RSS의 리다이렉트 링크 구조상 그렇습니다 |
