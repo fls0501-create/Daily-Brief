@@ -9,6 +9,10 @@
  * 브라우저 주소창이나 curl로 직접 호출할 수도 있습니다:
  *   https://당신의사이트주소.netlify.app/.netlify/functions/manual-update-news?secret=여기에_MANUAL_UPDATE_SECRET_값
  *
+ * 기존에 저장된 데이터를 전부 지우고 완전히 새로 시작하고 싶으면 reset=true 를 추가하세요:
+ *   https://당신의사이트주소.netlify.app/.netlify/functions/manual-update-news?reset=true
+ * (회사명 사전이나 업권 기준을 바꾼 뒤, 예전 기준으로 저장된 낡은 데이터를 완전히 정리하고 싶을 때 사용)
+ *
  * MANUAL_UPDATE_SECRET 환경변수를 설정해두면, 그 값을 아는 사람만 실행할 수 있습니다.
  * (내부용 도구라면 설정하지 않아도 무방합니다. 설정하지 않으면 화면의 새로고침 버튼도
  *  별도 값 없이 그냥 잘 작동합니다.)
@@ -30,7 +34,8 @@ exports.handler = async (event) => {
   }
 
   try {
-    const payload = await runUpdate(event);
+    const reset = event.queryStringParameters?.reset === 'true';
+    const payload = await runUpdate(event, reset);
     return {
       statusCode: 200,
       headers: { "Content-Type": "application/json; charset=utf-8" },

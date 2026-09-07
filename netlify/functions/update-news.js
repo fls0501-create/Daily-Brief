@@ -145,15 +145,25 @@ function mergeArticles(existing, incoming) {
     .sort((a, b) => b.date.localeCompare(a.date));
 }
 
-/** 실제 수집→분석→저장을 수행하는 공용 함수 (스케줄 실행, 수동 실행, 화면의 새로고침 버튼이 모두 공유) */
-async function runUpdate(event) {
+const ALLOWED_SECTORS = ["생보", "손보", "삼성금융", "GA", "당국"];
+
+/** 실제 수집→분석→저장을 수행하는 공용 함수 (스케줄 실행, 수동 실행, 화면의 새로고침 버튼이 모두 공유)
+ *  @param {object} event Lambda 이벤트 (Blobs 연결용)
+ *  @param {boolean} reset true면 기존에 저장된 데이터를 전부 버리고 새로 수집한 것만 저장 (완전 초기화) */
+async function runUpdate(event, reset = false) {
   // Lambda 호환 모드에서는 Netlify Blobs 환경이 자동 설정되지 않으므로 수동 연결 필요
   if (event) connectLambda(event);
 
   const store = getStore(BLOB_STORE_NAME);
 
-  const existingRaw = await store.get(BLOB_KEY, { type: "json" }).catch(() => null);
-  const existingArticles = existingRaw?.articles || [];
+  let existingArticles = [];
+  if (!reset) {
+    const existingRaw = await store.get(BLOB_KEY, { type: "json" }).catch(() => null);
+    existingArticles = existingRaw?.articles || [];
+    // 과거에 저장된 기사 중 지금은 추적 대상이 아닌 업권(예: 예전 '기타'/'은행'/'카드')은
+    // 회사명 사전이나 업권 기준이 바뀌었을 때 자동으로 정리되도록 매번 재필터링
+    existingArticles = existingArticles.filter((a) => ALLOWED_SECTORS.includes(a.sector));
+  }
 
   const incoming = await collectAndAnalyze();
   const merged = mergeArticles(existingArticles, incoming);
