@@ -23,7 +23,7 @@
  */
 
 const { schedule } = require("@netlify/functions");
-const { getStore } = require("@netlify/blobs");
+const { getStore, connectLambda } = require("@netlify/blobs");
 const { searchMultiple, filterRecentAndDedupe } = require("./lib/google-news");
 const { extractCompanies } = require("./lib/companies");
 const { analyzeAll } = require("./lib/analyze");
@@ -144,7 +144,10 @@ function mergeArticles(existing, incoming) {
 }
 
 /** 실제 수집→분석→저장을 수행하는 공용 함수 (스케줄 실행, 수동 실행, 화면의 새로고침 버튼이 모두 공유) */
-async function runUpdate() {
+async function runUpdate(event) {
+  // Lambda 호환 모드에서는 Netlify Blobs 환경이 자동 설정되지 않으므로 수동 연결 필요
+  if (event) connectLambda(event);
+
   const store = getStore(BLOB_STORE_NAME);
 
   const existingRaw = await store.get(BLOB_KEY, { type: "json" }).catch(() => null);
@@ -169,9 +172,9 @@ async function runUpdate() {
   return payload;
 }
 
-const handler = async () => {
+const handler = async (event) => {
   try {
-    const payload = await runUpdate();
+    const payload = await runUpdate(event);
     return {
       statusCode: 200,
       body: JSON.stringify({ ok: true, newThisRun: payload.newThisRun, total: payload.articleCount }),

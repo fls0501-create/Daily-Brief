@@ -30,7 +30,7 @@ exports.handler = async (event) => {
   }
 
   try {
-    const payload = await runUpdate();
+    const payload = await runUpdate(event);
     return {
       statusCode: 200,
       headers: { "Content-Type": "application/json; charset=utf-8" },

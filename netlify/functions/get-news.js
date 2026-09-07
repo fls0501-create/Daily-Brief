@@ -8,13 +8,16 @@
  * -------------------------------------------------------------
  */
 
-const { getStore } = require("@netlify/blobs");
+const { getStore, connectLambda } = require("@netlify/blobs");
 
 const BLOB_STORE_NAME = "news";
 const BLOB_KEY = "latest";
 
-exports.handler = async () => {
+exports.handler = async (event) => {
   try {
+    // Lambda 호환 모드에서는 Netlify Blobs 환경이 자동 설정되지 않으므로 수동 연결 필요
+    connectLambda(event);
+
     const store = getStore(BLOB_STORE_NAME);
     const data = await store.get(BLOB_KEY, { type: "json" });
 
