@@ -147,4 +147,48 @@ async function analyzeAll(candidates, batchSize = 10) {
   return results;
 }
 
-module.exports = { analyzeBatch, analyzeAll };
+/** 오늘 수집된 기사 전체를 바탕으로 "최근 동향 요약"을 2~3문장으로 생성 */
+async function generateTrendSummary(articles) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey || articles.length === 0) return "";
+
+  const listText = articles
+    .slice(0, 30)
+    .map((a) => `- [${a.sector}] ${a.company}: ${a.title} (${a.facts?.[0] || ""})`)
+    .join("\n");
+
+  const prompt = `당신은 삼성생명 소비자보호실 임원을 위한 애널리스트입니다.
+아래는 최근 수집된 보험/금융 소비자보호 관련 기사 목록입니다.
+
+${listText}
+
+이 목록을 바탕으로 "금융당국의 정책·감독 동향"과 "타 보험사·은행·카드사의 소비자보호 관련 움직임"을
+종합해서 임원이 아침에 읽을 수 있는 동향 요약을 작성하세요.
+
+작성 원칙:
+- 2~3문장, 총 200자 내외
+- 특정 기사 하나를 나열하지 말고, 여러 기사를 관통하는 흐름·패턴을 짚을 것
+  (예: "당국은 ~하는 방향으로 감독을 강화하는 한편, 업계는 ~한 움직임을 보이고 있다" 같은 종합 서술)
+- 문장 앞뒤로 따옴표, 마크다운, 설명 문구를 붙이지 말고 본문만 출력
+- 원문 기사 문장을 그대로 옮기지 말고 당신의 표현으로 재구성할 것`;
+
+  try {
+    const res = await fetch(`${GEMINI_URL}?key=${apiKey}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.4, maxOutputTokens: 500 },
+      }),
+    });
+    if (!res.ok) return "";
+    const data = await res.json();
+    const text = data?.candidates?.[0]?.content?.parts?.map((p) => p.text || "").join("") || "";
+    return text.trim();
+  } catch (err) {
+    console.error("동향 요약 생성 실패:", err.message);
+    return "";
+  }
+}
+
+module.exports = { analyzeBatch, analyzeAll, generateTrendSummary };

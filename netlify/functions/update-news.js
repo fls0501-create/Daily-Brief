@@ -26,7 +26,7 @@ const { schedule } = require("@netlify/functions");
 const { getStore, connectLambda } = require("@netlify/blobs");
 const { searchMultiple, filterRecentAndDedupe } = require("./lib/google-news");
 const { extractCompanies } = require("./lib/companies");
-const { analyzeAll } = require("./lib/analyze");
+const { analyzeAll, generateTrendSummary } = require("./lib/analyze");
 
 const KEYWORDS = [
   "소비자보호",
@@ -156,10 +156,18 @@ async function runUpdate(event) {
   const incoming = await collectAndAnalyze();
   const merged = mergeArticles(existingArticles, incoming);
 
+  // 최신(가장 최근 날짜) 기사들을 기준으로 동향 요약 생성
+  const latestDate = merged[0]?.date;
+  const recentForTrend = merged.filter((a) => a.date === latestDate).length >= 5
+    ? merged.filter((a) => a.date === latestDate)
+    : merged.slice(0, 15); // 당일 기사가 너무 적으면 최신 15건 기준으로 대체
+  const trendSummary = await generateTrendSummary(recentForTrend);
+
   const payload = {
     lastUpdated: new Date().toISOString(),
     articleCount: merged.length,
     newThisRun: incoming.length,
+    trendSummary,
     articles: merged,
   };
 

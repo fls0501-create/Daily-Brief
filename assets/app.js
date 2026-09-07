@@ -23,6 +23,7 @@ const state = {
   query: "",
   articles: [],   // 서버에서 받아온 기사 배열
   lastUpdated: null,
+  trendSummary: "", // 백엔드(Gemini)가 생성한 동향 요약
   status: "loading" // loading | ok | error
 };
 
@@ -50,6 +51,7 @@ async function loadNews(){
     const data = await res.json();
     state.articles = (data.articles || []).slice().sort((a,b) => b.date.localeCompare(a.date));
     state.lastUpdated = data.lastUpdated || null;
+    state.trendSummary = data.trendSummary || "";
     state.status = "ok";
   }catch(err){
     console.error('뉴스 데이터를 불러오지 못했습니다:', err);
@@ -128,11 +130,15 @@ function renderTrend(){
     el.innerHTML = `<p>최근 동향 요약을 불러오지 못했습니다.</p>`;
     return;
   }
+  if(state.trendSummary){
+    el.innerHTML = `<p>${escapeHtml(state.trendSummary)}</p>`;
+    return;
+  }
   if(state.articles.length === 0){
     el.innerHTML = `<p>아직 데이터가 충분히 쌓이지 않았습니다.</p>`;
     return;
   }
-  // 카테고리별 최근 이슈를 간단히 조합해 동향 요약을 자동 생성
+  // 백엔드 요약이 없을 때의 대체용 간단 요약 (카테고리별 건수 기반)
   const counts = {};
   state.articles.forEach(a => { counts[a.sector] = (counts[a.sector]||0) + 1; });
   const top = Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,3)
