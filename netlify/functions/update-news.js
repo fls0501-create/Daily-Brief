@@ -146,6 +146,8 @@ function mergeArticles(existing, incoming) {
 }
 
 const ALLOWED_SECTORS = ["생보", "손보", "삼성금융", "GA", "당국"];
+const LOCK_KEY = "lock";
+const LOCK_TTL_MS = 50 * 1000; // 이 시간 안에 겹쳐 들어오는 실행은 거부 (경쟁 상태 방지)
 
 /** 실제 수집→분석→저장을 수행하는 공용 함수 (스케줄 실행, 수동 실행, 화면의 새로고침 버튼이 모두 공유)
  *  @param {object} event Lambda 이벤트 (Blobs 연결용)
@@ -156,6 +158,34 @@ async function runUpdate(event, reset = false) {
 
   const store = getStore(BLOB_STORE_NAME);
 
+  // ---- 동시 실행 방지 -------------------------------------------------
+  // 새로고침 버튼을 여러 번 누르거나 탭이 여러 개 열려있으면 update-news가 동시에 여러 번
+  // 돌 수 있는데, 이 경우 "먼저 끝난 성공 결과"를 "나중에 끝난 실패/빈 결과"가 덮어써버리는
+  // 경쟁 상태(race condition)가 생길 수 있습니다. 이를 막기 위해 간단한 잠금을 겁니다.
+  const existingLock = await store.get(LOCK_KEY, { type: "json" }).catch(() => null);
+  if (existingLock && Date.now() - existingLock.startedAt < LOCK_TTL_MS) {
+    console.warn("[update-news] 이미 다른 실행이 진행 중이라 이번 요청은 건너뜁니다.");
+    const currentRaw = await store.get(BLOB_KEY, { type: "json" }).catch(() => null);
+    return {
+      lastUpdated: currentRaw?.lastUpdated || null,
+      articleCount: currentRaw?.articles?.length || 0,
+      newThisRun: 0,
+      skipped: true,
+      trendSummary: currentRaw?.trendSummary || "",
+      articles: currentRaw?.articles || [],
+    };
+  }
+  await store.setJSON(LOCK_KEY, { startedAt: Date.now() });
+
+  try {
+    return await doUpdate(store, reset);
+  } finally {
+    await store.delete(LOCK_KEY).catch(() => {});
+  }
+}
+
+/** 잠금 확보 이후 실제 수집 로직 */
+async function doUpdate(store, reset) {
   let existingArticles = [];
   if (!reset) {
     const existingRaw = await store.get(BLOB_KEY, { type: "json" }).catch(() => null);
