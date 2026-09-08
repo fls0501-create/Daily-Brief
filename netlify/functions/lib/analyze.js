@@ -18,6 +18,25 @@
  */
 
 const MODEL = "gemini-flash-latest"; // 무료 티어 대상 모델. 없어지면 https://ai.google.dev/gemini-api/docs/models 에서 최신 Flash 계열 이름으로 교체
+
+/** Gemini 서버가 일시적으로 과부하(503)일 때를 대비한 재시도 래퍼.
+ *  503/429처럼 "잠시 후 다시 시도하면 되는" 오류에 한해 지수 백오프로 재시도합니다. */
+async function withRetry(fn, { retries = 2, baseDelayMs = 2000 } = {}) {
+  let lastErr;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      const isRetryable = /503|429|UNAVAILABLE|overloaded|high demand/i.test(err.message || "");
+      if (!isRetryable || attempt === retries) throw err;
+      const delay = baseDelayMs * Math.pow(2, attempt); // 2s, 4s, ...
+      console.warn(`Gemini 일시적 오류, ${delay}ms 후 재시도 (${attempt + 1}/${retries})...`);
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
+  throw lastErr;
+}
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
 
 const SYSTEM_PROMPT = `당신은 국내 보험/금융 업계를 모니터링하는 애널리스트입니다.
@@ -91,32 +110,35 @@ async function analyzeBatch(candidates) {
     2
   );
 
-  const res = await fetch(`${GEMINI_URL}?key=${apiKey}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
-      contents: [
-        {
-          role: "user",
-          parts: [
-            {
-              text: `다음은 오늘 수집된 후보 기사 목록입니다. 위 기준에 따라 선별·요약해서 JSON 배열로만 응답하세요.\n\n${userContent}`,
-            },
-          ],
+  const res = await withRetry(() =>
+    fetch(`${GEMINI_URL}?key=${apiKey}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
+        contents: [
+          {
+            role: "user",
+            parts: [
+              {
+                text: `다음은 오늘 수집된 후보 기사 목록입니다. 위 기준에 따라 선별·요약해서 JSON 배열로만 응답하세요.\n\n${userContent}`,
+              },
+            ],
+          },
+        ],
+        generationConfig: {
+          temperature: 0.3,
+          maxOutputTokens: 8000,
         },
-      ],
-      generationConfig: {
-        temperature: 0.3,
-        maxOutputTokens: 8000,
-      },
-    }),
-  });
-
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`Gemini API 오류 (${res.status}): ${body}`);
-  }
+      }),
+    }).then(async (r) => {
+      if (!r.ok) {
+        const body = await r.text().catch(() => "");
+        throw new Error(`Gemini API 오류 (${r.status}): ${body}`);
+      }
+      return r;
+    })
+  );
 
   const data = await res.json();
   const text = data?.candidates?.[0]?.content?.parts?.map((p) => p.text || "").join("") || "";
@@ -170,8 +192,8 @@ async function generateTrendSummary(articles) {
 
 ${listText}
 
-이 목록을 바탕으로 "금융당국의 정책·감독 동향"과 "타 보험사·은행·카드사의 소비자보호 관련 움직임"을
-종합해서 임원이 아침에 읽을 수 있는 동향 요약을 작성하세요.
+이 목록을 바탕으로 "금융당국의 정책·감독 동향"과 "생명보험·손해보험·삼성금융사·GA(법인보험대리점)의
+소비자보호 관련 움직임"을 종합해서 임원이 아침에 읽을 수 있는 동향 요약을 작성하세요.
 
 작성 원칙:
 - 2~3문장, 총 200자 내외
@@ -181,15 +203,22 @@ ${listText}
 - 원문 기사 문장을 그대로 옮기지 말고 당신의 표현으로 재구성할 것`;
 
   try {
-    const res = await fetch(`${GEMINI_URL}?key=${apiKey}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.4, maxOutputTokens: 500 },
-      }),
-    });
-    if (!res.ok) return "";
+    const res = await withRetry(() =>
+      fetch(`${GEMINI_URL}?key=${apiKey}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.4, maxOutputTokens: 500 },
+        }),
+      }).then(async (r) => {
+        if (!r.ok) {
+          const body = await r.text().catch(() => "");
+          throw new Error(`Gemini API 오류 (${r.status}): ${body}`);
+        }
+        return r;
+      })
+    );
     const data = await res.json();
     const text = data?.candidates?.[0]?.content?.parts?.map((p) => p.text || "").join("") || "";
     return text.trim();
