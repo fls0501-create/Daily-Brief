@@ -1,11 +1,11 @@
 /* ============================================================
    소비자보호 Daily Brief — 프론트엔드 로직
-   - /.netlify/functions/get-news 에서 기사 JSON을 읽어와 렌더링
+   - /api/get-news 에서 기사 JSON을 읽어와 렌더링
    - 디자인/컴포넌트 구조는 기존 정적 버전과 동일하게 유지
    ============================================================ */
 
-const DATA_ENDPOINT = '/.netlify/functions/get-news';
-const REFRESH_ENDPOINT = '/.netlify/functions/manual-update-news';
+const DATA_ENDPOINT = '/api/get-news';
+const REFRESH_ENDPOINT = '/api/update-news';
 
 const CAT_LABEL = {
   "생보": "생명보험",
@@ -299,24 +299,6 @@ refreshBtn.addEventListener('click', async ()=>{
     if(!res.ok || data.ok === false){
       throw new Error(data.error || ('HTTP ' + res.status));
     }
-    refreshLabel.textContent = `완료 (신규 ${data.newThisRun}건)`;
-    await loadNews(); // 방금 저장된 최신 데이터를 다시 불러와 화면 갱신
-  }catch(err){
-    console.error('수동 갱신 실패:', err);
-    refreshLabel.textContent = '갱신 실패';
-  }finally{
-    refreshBtn.classList.remove('spinning');
-    refreshBtn.disabled = false;
-    setTimeout(()=>{ refreshLabel.textContent = '새로고침'; }, 3000);
-  }
-});
-
-/* ---------------- 초기 실행 ---------------- */
-
-loadNews();
-
-// 페이지를 열어둔 채로 오래 있으면 10분마다 최신 데이터 재조회 (수집 자체는 아니고, 저장된 데이터 재확인)
-setInterval(loadNews, 10 * 60 * 1000);
-document.addEventListener('visibilitychange', ()=>{
-  if(document.visibilityState === 'visible') loadNews();
-});
+    if(data.skipped){
+      refreshLabel.textContent = '이미 실행 중… 잠시 후 다시 시도';
+      return;
